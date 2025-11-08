@@ -13,7 +13,7 @@ const MAX_CONTEXT_TOKENS = 2000; // Approx 1500 words to stay under token limits
 export async function generateAIResponse(
   query: string,
   context: string[],
-  model: string = 'mistralai/Mistral-7B-Instruct-v0.2'
+  model: string = 'microsoft/Phi-3-mini-4k-instruct'
 ): Promise<string> {
   if (!hf) {
     // Fallback response if API key not configured
@@ -32,14 +32,14 @@ export async function generateAIResponse(
       contextText = words.slice(0, targetWords).join(' ') + '...';
     }
 
-    const prompt = `Context from course materials:
+    const prompt = `<|system|>
+You are a helpful AI tutor assistant for BTech students. Answer questions based on the provided course materials.<|end|>
+<|user|>
+Context from course materials:
 ${contextText}
 
-Student Question: ${query}
-
-Based on the context provided above, please answer the student's question clearly and concisely. If the context doesn't contain relevant information, say so.
-
-Answer:`;
+Question: ${query}<|end|>
+<|assistant|>`;
 
     const response = await hf.textGeneration({
       model,
