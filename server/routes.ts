@@ -3,8 +3,6 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import multer from "multer";
 import { PDFParse } from "pdf-parse";
-import type { TextResult } from "pdf-parse";
-import { createWorker } from "tesseract.js";
 import { chunkText, generateSimpleEmbedding } from "./utils/textProcessing";
 import { generateAIResponse, initializeHuggingFace } from "./utils/aiService";
 import { z } from "zod";
@@ -203,20 +201,15 @@ async function processPDF(documentId: string, buffer: Buffer, type: string) {
   try {
     let extractedText = "";
 
-    if (type === "book") {
-      // For digital books, try direct text extraction first
-      try {
-        const parser = new PDFParse();
-        const data: TextResult = await parser.parse({ data: buffer });
-        extractedText = data.text;
-      } catch (error) {
-        console.log("Direct PDF extraction failed, falling back to OCR");
-      }
-    }
-
-    // If no text extracted or it's notes/pyq, use OCR
-    if (!extractedText || type === "notes" || type === "pyq") {
-      extractedText = await extractTextWithOCR(buffer);
+    // Use pdf-parse for all document types
+    try {
+      const parser = new PDFParse({ data: buffer });
+      const result = await parser.getText();
+      extractedText = result.text;
+      await parser.destroy();
+    } catch (error) {
+      console.error("PDF text extraction failed:", error);
+      extractedText = "";
     }
 
     // Update document with extracted text
@@ -243,18 +236,5 @@ async function processPDF(documentId: string, buffer: Buffer, type: string) {
     await storage.updateDocument(documentId, {
       processingStatus: "failed",
     });
-  }
-}
-
-async function extractTextWithOCR(buffer: Buffer): Promise<string> {
-  const worker = await createWorker('eng');
-  
-  try {
-    // For simplicity, we'll just extract text from the first page
-    // In production, you'd convert each PDF page to an image and process them all
-    const { data: { text } } = await worker.recognize(buffer);
-    return text;
-  } finally {
-    await worker.terminate();
   }
 }
