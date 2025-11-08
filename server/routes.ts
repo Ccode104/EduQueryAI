@@ -2,7 +2,8 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import multer from "multer";
-import * as pdfParse from "pdf-parse";
+import { PDFParse } from "pdf-parse";
+import type { TextResult } from "pdf-parse";
 import { createWorker } from "tesseract.js";
 import { chunkText, generateSimpleEmbedding } from "./utils/textProcessing";
 import { generateAIResponse, initializeHuggingFace } from "./utils/aiService";
@@ -205,7 +206,8 @@ async function processPDF(documentId: string, buffer: Buffer, type: string) {
     if (type === "book") {
       // For digital books, try direct text extraction first
       try {
-        const data = await pdfParse(buffer);
+        const parser = new PDFParse();
+        const data: TextResult = await parser.parse({ data: buffer });
         extractedText = data.text;
       } catch (error) {
         console.log("Direct PDF extraction failed, falling back to OCR");
