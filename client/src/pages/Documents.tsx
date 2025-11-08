@@ -1,73 +1,63 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DocumentListItem from "@/components/DocumentListItem";
 import EmptyState from "@/components/EmptyState";
 import { BookOpen, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLocation } from "wouter";
-
-// TODO: remove mock data
-const mockDocuments = [
-  {
-    id: "1",
-    name: "DSA Notes - Chapter 1-3.pdf",
-    type: "notes" as const,
-    size: "2.4 MB",
-    status: "completed" as const,
-    course: "CS201",
-  },
-  {
-    id: "2",
-    name: "DSA PYQ 2023.pdf",
-    type: "pyq" as const,
-    size: "1.8 MB",
-    status: "completed" as const,
-    course: "CS201",
-  },
-  {
-    id: "3",
-    name: "Operating Systems Concepts.pdf",
-    type: "book" as const,
-    size: "15.2 MB",
-    status: "completed" as const,
-    course: "CS301",
-  },
-  {
-    id: "4",
-    name: "OS PYQ 2022-2023.pdf",
-    type: "pyq" as const,
-    size: "3.1 MB",
-    status: "completed" as const,
-    course: "CS301",
-  },
-  {
-    id: "5",
-    name: "Database Notes - Normalization.pdf",
-    type: "notes" as const,
-    size: "1.9 MB",
-    status: "completed" as const,
-    course: "CS202",
-  },
-];
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Documents() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
 
-  const filteredDocuments = mockDocuments.filter((doc) => {
-    const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  // Get course filter from URL if present
+  const searchParams = new URLSearchParams(location.split("?")[1] || "");
+  const courseFilter = searchParams.get("course");
+
+  const { data: documents = [] } = useQuery({
+    queryKey: ["/api/documents"],
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/documents/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      toast({
+        title: "Document deleted",
+      });
+    },
+  });
+
+  const filteredDocuments = documents.filter((doc: any) => {
+    const matchesSearch =
+      doc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       doc.course.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesTab = activeTab === "all" || doc.type === activeTab;
-    return matchesSearch && matchesTab;
+    const matchesCourse = !courseFilter || doc.course === courseFilter;
+    return matchesSearch && matchesTab && matchesCourse;
   });
+
+  useEffect(() => {
+    if (courseFilter) {
+      setSearchQuery(courseFilter);
+    }
+  }, [courseFilter]);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-semibold mb-2">My Documents</h1>
         <p className="text-muted-foreground">
-          Manage all your uploaded course materials
+          {courseFilter
+            ? `Documents for ${courseFilter}`
+            : "Manage all your uploaded course materials"}
         </p>
       </div>
 
@@ -84,23 +74,31 @@ export default function Documents() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="all" data-testid="tab-all">All Documents</TabsTrigger>
-          <TabsTrigger value="notes" data-testid="tab-notes">Notes</TabsTrigger>
-          <TabsTrigger value="pyq" data-testid="tab-pyq">PYQs</TabsTrigger>
-          <TabsTrigger value="book" data-testid="tab-books">Books</TabsTrigger>
+          <TabsTrigger value="all" data-testid="tab-all">
+            All Documents
+          </TabsTrigger>
+          <TabsTrigger value="notes" data-testid="tab-notes">
+            Notes
+          </TabsTrigger>
+          <TabsTrigger value="pyq" data-testid="tab-pyq">
+            PYQs
+          </TabsTrigger>
+          <TabsTrigger value="book" data-testid="tab-books">
+            Books
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab} className="mt-6">
           {filteredDocuments.length > 0 ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {filteredDocuments.map((doc) => (
+              {filteredDocuments.map((doc: any) => (
                 <DocumentListItem
                   key={doc.id}
                   name={doc.name}
                   type={doc.type}
-                  size={doc.size}
-                  status={doc.status}
-                  onDelete={() => console.log("Delete", doc.id)}
+                  size={`${(doc.fileSize / 1024 / 1024).toFixed(1)} MB`}
+                  status={doc.processingStatus}
+                  onDelete={() => deleteMutation.mutate(doc.id)}
                 />
               ))}
             </div>

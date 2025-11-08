@@ -5,11 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import EmptyState from "@/components/EmptyState";
 import { Upload as UploadIcon } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
-// TODO: remove mock data
 interface UploadedFile {
   id: string;
   name: string;
@@ -21,50 +22,77 @@ interface UploadedFile {
 }
 
 export default function Upload() {
-  const [files, setFiles] = useState<UploadedFile[]>([]);
+  const { toast } = useToast();
   const [documentType, setDocumentType] = useState<"notes" | "pyq" | "book">("notes");
   const [courseName, setCourseName] = useState("");
 
+  const { data: documents = [] } = useQuery<UploadedFile[]>({
+    queryKey: ["/api/documents"],
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("course", courseName || "Uncategorized");
+      formData.append("type", documentType);
+
+      const response = await fetch("/api/documents/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      toast({
+        title: "Upload successful",
+        description: "Your document is being processed",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Upload failed",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/documents/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
+      toast({
+        title: "Document deleted",
+      });
+    },
+  });
+
   const handleFilesSelected = (selectedFiles: File[]) => {
-    console.log("Files selected:", selectedFiles);
-    
-    const newFiles: UploadedFile[] = selectedFiles.map((file, idx) => ({
-      id: `${Date.now()}-${idx}`,
-      name: file.name,
-      type: documentType,
-      size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
-      status: "processing",
-      progress: 0,
-      course: courseName || "Uncategorized",
-    }));
+    if (!courseName) {
+      toast({
+        title: "Course name required",
+        description: "Please enter a course name before uploading",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    setFiles([...files, ...newFiles]);
-
-    // Simulate processing
-    newFiles.forEach((file) => {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += 10;
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.id === file.id ? { ...f, progress } : f
-          )
-        );
-        if (progress >= 100) {
-          clearInterval(interval);
-          setFiles((prev) =>
-            prev.map((f) =>
-              f.id === file.id ? { ...f, status: "completed" } : f
-            )
-          );
-        }
-      }, 500);
+    selectedFiles.forEach((file) => {
+      uploadMutation.mutate(file);
     });
   };
 
   const handleDelete = (id: string) => {
-    console.log("Delete file:", id);
-    setFiles(files.filter((f) => f.id !== id));
+    deleteMutation.mutate(id);
   };
 
   return (
@@ -125,20 +153,19 @@ export default function Upload() {
             <CardHeader>
               <CardTitle>Uploaded Files</CardTitle>
               <CardDescription>
-                {files.length} {files.length === 1 ? "file" : "files"}
+                {documents.length} {documents.length === 1 ? "file" : "files"}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {files.length > 0 ? (
+              {documents.length > 0 ? (
                 <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                  {files.map((file) => (
+                  {documents.map((file: any) => (
                     <DocumentListItem
                       key={file.id}
                       name={file.name}
                       type={file.type}
-                      size={file.size}
-                      status={file.status}
-                      progress={file.progress}
+                      size={`${(file.fileSize / 1024 / 1024).toFixed(1)} MB`}
+                      status={file.processingStatus}
                       onDelete={() => handleDelete(file.id)}
                     />
                   ))}

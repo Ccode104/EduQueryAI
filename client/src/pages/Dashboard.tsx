@@ -4,47 +4,49 @@ import EmptyState from "@/components/EmptyState";
 import { BookOpen, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 
-// TODO: remove mock data
-const mockCourses = [
-  {
-    id: "1",
-    name: "Data Structures & Algorithms",
-    code: "CS201",
-    documentCount: 12,
-    lastUpdated: "2 days ago",
-  },
-  {
-    id: "2",
-    name: "Operating Systems",
-    code: "CS301",
-    documentCount: 8,
-    lastUpdated: "5 days ago",
-  },
-  {
-    id: "3",
-    name: "Database Management Systems",
-    code: "CS202",
-    documentCount: 15,
-    lastUpdated: "1 week ago",
-  },
-  {
-    id: "4",
-    name: "Computer Networks",
-    code: "CS302",
-    documentCount: 6,
-    lastUpdated: "3 days ago",
-  },
-];
+interface CourseStats {
+  course: string;
+  documentCount: number;
+  lastUpdated: string;
+}
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredCourses = mockCourses.filter(
-    (course) =>
-      course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      course.code.toLowerCase().includes(searchQuery.toLowerCase())
+  const { data: documents = [] } = useQuery({
+    queryKey: ["/api/documents"],
+  });
+
+  // Aggregate documents by course
+  const courseStats = documents.reduce((acc: Map<string, CourseStats>, doc: any) => {
+    if (!acc.has(doc.course)) {
+      acc.set(doc.course, {
+        course: doc.course,
+        documentCount: 0,
+        lastUpdated: doc.uploadedAt,
+      });
+    }
+    const stats = acc.get(doc.course)!;
+    stats.documentCount++;
+    if (new Date(doc.uploadedAt) > new Date(stats.lastUpdated)) {
+      stats.lastUpdated = doc.uploadedAt;
+    }
+    return acc;
+  }, new Map());
+
+  const courses = Array.from(courseStats.values()).map((stats) => ({
+    ...stats,
+    lastUpdated: new Date(stats.lastUpdated).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    }),
+  }));
+
+  const filteredCourses = courses.filter((course) =>
+    course.course.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -71,18 +73,16 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredCourses.map((course) => (
             <CourseCard
-              key={course.id}
-              name={course.name}
-              code={course.code}
+              key={course.course}
+              name={course.course}
+              code={course.course}
               documentCount={course.documentCount}
               lastUpdated={course.lastUpdated}
               onAsk={() => {
-                console.log("Ask AI for", course.code);
-                setLocation("/chat");
+                setLocation(`/chat?course=${encodeURIComponent(course.course)}`);
               }}
               onViewDocs={() => {
-                console.log("View docs for", course.code);
-                setLocation("/documents");
+                setLocation(`/documents?course=${encodeURIComponent(course.course)}`);
               }}
             />
           ))}
@@ -90,8 +90,12 @@ export default function Dashboard() {
       ) : (
         <EmptyState
           icon={BookOpen}
-          title="No courses found"
-          description="Try adjusting your search query or upload documents to get started"
+          title={searchQuery ? "No courses found" : "No documents uploaded yet"}
+          description={
+            searchQuery
+              ? "Try adjusting your search query"
+              : "Upload your course materials to get started with AI-powered assistance"
+          }
           actionLabel="Upload Documents"
           onAction={() => setLocation("/upload")}
         />
