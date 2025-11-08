@@ -32,7 +32,7 @@ export default function Chat() {
     enabled: !!conversationId,
   });
 
-  const { data: documents = [] } = useQuery({
+  const { data: documents = [] } = useQuery<any[]>({
     queryKey: ["/api/documents"],
   });
 

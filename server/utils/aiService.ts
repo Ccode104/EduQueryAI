@@ -8,6 +8,8 @@ export function initializeHuggingFace(apiKey?: string) {
   }
 }
 
+const MAX_CONTEXT_TOKENS = 2000; // Approx 1500 words to stay under token limits
+
 export async function generateAIResponse(
   query: string,
   context: string[],
@@ -19,7 +21,17 @@ export async function generateAIResponse(
   }
 
   try {
-    const contextText = context.join('\n\n');
+    // Budget tokens: limit context length to prevent expensive prompts
+    let contextText = context.join('\n\n');
+    const approxTokens = contextText.split(/\s+/).length * 1.3; // Rough estimate
+    
+    if (approxTokens > MAX_CONTEXT_TOKENS) {
+      // Truncate context to fit within budget
+      const words = contextText.split(/\s+/);
+      const targetWords = Math.floor(MAX_CONTEXT_TOKENS / 1.3);
+      contextText = words.slice(0, targetWords).join(' ') + '...';
+    }
+
     const prompt = `Context from course materials:
 ${contextText}
 

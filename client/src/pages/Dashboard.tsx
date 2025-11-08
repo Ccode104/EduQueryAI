@@ -16,12 +16,12 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { data: documents = [] } = useQuery({
+  const { data: documents = [] } = useQuery<any[]>({
     queryKey: ["/api/documents"],
   });
 
   // Aggregate documents by course
-  const courseStats = documents.reduce((acc: Map<string, CourseStats>, doc: any) => {
+  const courseStats = (documents as any[]).reduce((acc: Map<string, CourseStats>, doc: any) => {
     if (!acc.has(doc.course)) {
       acc.set(doc.course, {
         course: doc.course,
@@ -37,7 +37,7 @@ export default function Dashboard() {
     return acc;
   }, new Map());
 
-  const courses = Array.from(courseStats.values()).map((stats) => ({
+  const courses = Array.from(courseStats.values()).map((stats: CourseStats) => ({
     ...stats,
     lastUpdated: new Date(stats.lastUpdated).toLocaleDateString("en-US", {
       month: "short",

@@ -19,7 +19,7 @@ export default function Documents() {
   const searchParams = new URLSearchParams(location.split("?")[1] || "");
   const courseFilter = searchParams.get("course");
 
-  const { data: documents = [] } = useQuery({
+  const { data: documents = [] } = useQuery<any[]>({
     queryKey: ["/api/documents"],
   });
 
